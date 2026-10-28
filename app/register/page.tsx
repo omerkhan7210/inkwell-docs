@@ -120,7 +120,7 @@ export default function RegisterPage() {
                       value={value}
                       onChange={e => set(e.target.value)}
                       required
-                      minLength={type === 'password' ? 6 : undefined}
+                      minLength={undefined}
                       className={`${inputClass} ${pl} pr-4`}
                       style={inputStyle}
                       onFocus={focusStyle}

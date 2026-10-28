@@ -29,15 +29,16 @@ export default function ThreeBackground() {
       renderer.setClearColor(0x000000, 0)
       mountRef.current.appendChild(renderer.domElement)
 
-      // Central large wireframe icosahedron
+      // Central large wireframe icosahedron — pushed up and back so it frames the hero without obscuring text
       const mainGeo = new THREE.IcosahedronGeometry(11, 2)
       const mainMat = new THREE.MeshBasicMaterial({
         color: 0x6366f1,
         wireframe: true,
         transparent: true,
-        opacity: 0.11,
+        opacity: 0.07,
       })
       const mainMesh = new THREE.Mesh(mainGeo, mainMat)
+      mainMesh.position.set(0, 8, -6)
       scene.add(mainMesh)
 
       // Orbiting secondary shapes
