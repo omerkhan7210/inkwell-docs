@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import TiptapEditor from '@/components/TiptapEditor'
@@ -7,7 +7,7 @@ import ShareDialog from '@/components/ShareDialog'
 import { formatRelative } from '@/lib/utils'
 import {
   CaretLeft, ShareNetwork, Check, Clock, Lock, PencilSimpleLine,
-  ArrowsOut, ArrowsIn, TextAlignLeft
+  ArrowsOut, ArrowsIn, TextAlignLeft, List, DownloadSimple, X
 } from '@phosphor-icons/react'
 
 const EASE = [0.32, 0.72, 0, 1] as const
@@ -15,6 +15,8 @@ const EASE = [0.32, 0.72, 0, 1] as const
 type Doc = {
   id: string; title: string; content_html: string; owner_email: string; updated_at: string
 }
+
+type Heading = { level: 1 | 2 | 3; text: string; index: number }
 
 function getWordCount(html: string) {
   const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -25,6 +27,108 @@ function getWordCount(html: string) {
 function getReadingTime(words: number) {
   const mins = Math.ceil(words / 200)
   return mins < 1 ? '<1 min' : `${mins} min read`
+}
+
+function parseHeadings(html: string): Heading[] {
+  const headings: Heading[] = []
+  const regex = /<h([123])[^>]*>([\s\S]*?)<\/h[123]>/gi
+  let match
+  let index = 0
+  while ((match = regex.exec(html)) !== null) {
+    const level = parseInt(match[1]) as 1 | 2 | 3
+    const text = match[2].replace(/<[^>]*>/g, '').trim()
+    if (text) headings.push({ level, text, index: index++ })
+  }
+  return headings
+}
+
+function exportMarkdown(title: string, html: string) {
+  import('turndown').then(({ default: TurndownService }) => {
+    const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' })
+    const md = `# ${title}\n\n${td.turndown(html)}`
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase() || 'document'}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  })
+}
+
+function OutlinePanel({ headings, onClose }: { headings: Heading[]; onClose: () => void }) {
+  const scrollToHeading = (text: string) => {
+    const editorEl = document.querySelector('.tiptap')
+    if (!editorEl) return
+    const allHeadings = editorEl.querySelectorAll('h1, h2, h3')
+    for (const el of allHeadings) {
+      if (el.textContent?.trim() === text) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        break
+      }
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      transition={{ duration: 0.35, ease: EASE }}
+      className="fixed left-4 top-20 z-30 w-56"
+      style={{
+        background: 'rgba(248,250,252,0.92)',
+        border: '1px solid rgba(15,23,42,0.09)',
+        borderRadius: '1.25rem',
+        backdropFilter: 'blur(20px)',
+        boxShadow: '0 8px 32px rgba(15,23,42,0.08)',
+      }}
+    >
+      <div className="flex items-center justify-between px-4 pt-4 pb-2"
+        style={{ borderBottom: '1px solid rgba(15,23,42,0.07)' }}>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.15em]"
+          style={{ color: 'rgba(15,23,42,0.4)' }}>Outline</span>
+        <button onClick={onClose}
+          className="p-1 rounded-lg transition-colors duration-200"
+          style={{ color: 'rgba(15,23,42,0.3)' }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(15,23,42,0.7)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(15,23,42,0.3)')}
+        >
+          <X size={13} weight="light" />
+        </button>
+      </div>
+
+      <div className="py-3 px-2 max-h-[60vh] overflow-y-auto">
+        {headings.length === 0 ? (
+          <p className="text-[11px] text-center py-4 px-2"
+            style={{ color: 'rgba(15,23,42,0.35)' }}>
+            Add headings to see an outline
+          </p>
+        ) : (
+          headings.map(h => (
+            <button
+              key={h.index}
+              onClick={() => scrollToHeading(h.text)}
+              className="w-full text-left px-2 py-1.5 rounded-lg text-xs transition-all duration-200 truncate block"
+              style={{
+                paddingLeft: `${(h.level - 1) * 12 + 8}px`,
+                color: h.level === 1 ? 'rgba(15,23,42,0.8)' : h.level === 2 ? 'rgba(15,23,42,0.6)' : 'rgba(15,23,42,0.45)',
+                fontWeight: h.level === 1 ? 600 : h.level === 2 ? 500 : 400,
+                fontSize: h.level === 1 ? '12px' : h.level === 2 ? '11.5px' : '11px',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.08)'; e.currentTarget.style.color = '#6366f1' }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.color = h.level === 1 ? 'rgba(15,23,42,0.8)' : h.level === 2 ? 'rgba(15,23,42,0.6)' : 'rgba(15,23,42,0.45)'
+              }}
+            >
+              {h.text}
+            </button>
+          ))
+        )}
+      </div>
+    </motion.div>
+  )
 }
 
 export default function DocumentClient({
@@ -38,10 +142,12 @@ export default function DocumentClient({
   const [lastSaved, setLastSaved] = useState(doc.updated_at)
   const [showShare, setShowShare] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
+  const [showOutline, setShowOutline] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const wordCount = useMemo(() => getWordCount(content), [content])
   const readingTime = useMemo(() => getReadingTime(wordCount), [wordCount])
+  const headings = useMemo(() => parseHeadings(content), [content])
 
   const save = useCallback(async (t: string, c: string) => {
     if (!isOwner) return
@@ -138,6 +244,35 @@ export default function DocumentClient({
                   </motion.div>
                 </AnimatePresence>
 
+                {/* Outline toggle */}
+                <motion.button
+                  onClick={() => setShowOutline(v => !v)}
+                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                  className="p-2 rounded-xl transition-all duration-200"
+                  style={{
+                    color: showOutline ? '#6366f1' : 'rgba(15,23,42,0.4)',
+                    background: showOutline ? 'rgba(99,102,241,0.1)' : 'transparent',
+                  }}
+                  title="Document outline"
+                >
+                  <List size={14} weight="light" />
+                </motion.button>
+
+                {/* Export as Markdown */}
+                <motion.button
+                  onClick={() => exportMarkdown(title, content)}
+                  whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                  className="p-2 rounded-xl transition-colors duration-200"
+                  style={{ color: 'rgba(15,23,42,0.4)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'rgba(15,23,42,0.75)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'rgba(15,23,42,0.4)')}
+                  title="Export as Markdown"
+                >
+                  <DownloadSimple size={14} weight="light" />
+                </motion.button>
+
                 {/* Focus mode toggle */}
                 <motion.button
                   onClick={() => setFocusMode(true)}
@@ -171,6 +306,13 @@ export default function DocumentClient({
         )}
       </AnimatePresence>
 
+      {/* Outline panel */}
+      <AnimatePresence>
+        {showOutline && !focusMode && (
+          <OutlinePanel headings={headings} onClose={() => setShowOutline(false)} />
+        )}
+      </AnimatePresence>
+
       {/* Focus mode exit bar */}
       <AnimatePresence>
         {focusMode && (
@@ -187,6 +329,14 @@ export default function DocumentClient({
               }}
             >
               <span className="text-xs text-white/50">{wordCount.toLocaleString()} words · {readingTime}</span>
+              <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.15)' }} />
+              <button
+                onClick={() => exportMarkdown(title, content)}
+                className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 transition-colors duration-200"
+              >
+                <DownloadSimple size={12} weight="light" />
+                Export
+              </button>
               <div style={{ width: 1, height: 12, background: 'rgba(255,255,255,0.15)' }} />
               <button
                 onClick={() => setFocusMode(false)}

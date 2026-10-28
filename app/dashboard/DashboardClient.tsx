@@ -8,6 +8,7 @@ import {
   PencilSimpleLine, Plus, UploadSimple, SignOut,
   FilePlus, Users, Clock, Trash, Files, ShareNetwork
 } from '@phosphor-icons/react'
+import TemplatePickerDialog, { TEMPLATES } from '@/components/TemplatePickerDialog'
 
 type Doc = {
   id: string; title: string; updated_at: string
@@ -31,6 +32,7 @@ export default function DashboardClient({ userEmail, userName }: { userEmail: st
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'mine' | 'shared'>('mine')
   const [uploading, setUploading] = useState(false)
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function loadDocs() {
@@ -41,13 +43,19 @@ export default function DashboardClient({ userEmail, userName }: { userEmail: st
   }
   useEffect(() => { loadDocs() }, [])
 
-  async function createNew() {
+  async function createFromTemplate(template: typeof TEMPLATES[0]) {
+    setShowTemplatePicker(false)
+    const title = template.id === 'blank' ? 'Untitled' : template.label
     const res = await fetch('/api/documents', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Untitled' }),
+      body: JSON.stringify({ title, content_html: template.content }),
     })
     const doc = await res.json()
     router.push(`/documents/${doc.id}`)
+  }
+
+  function createNew() {
+    setShowTemplatePicker(true)
   }
 
   async function deleteDoc(id: string, e: React.MouseEvent) {
@@ -306,6 +314,15 @@ export default function DashboardClient({ userEmail, userName }: { userEmail: st
           </AnimatePresence>
         )}
       </main>
+
+      <AnimatePresence>
+        {showTemplatePicker && (
+          <TemplatePickerDialog
+            onSelect={createFromTemplate}
+            onClose={() => setShowTemplatePicker(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
