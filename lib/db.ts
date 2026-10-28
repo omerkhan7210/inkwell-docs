@@ -3,6 +3,8 @@ import { neon } from '@neondatabase/serverless'
 const sql = neon(process.env.DATABASE_URL!)
 
 export async function initDB() {
+  // pgcrypto provides crypt() for blowfish password hashing — all auth stays in Postgres
+  await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`
   await sql`
     CREATE TABLE IF NOT EXISTS inkwell_users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -38,11 +40,22 @@ export async function getUserByEmail(email: string) {
   return rows[0] || null
 }
 
-export async function createUser(email: string, name: string, passwordHash: string) {
+// Verify password using pgcrypto crypt() — no Node.js bcrypt needed
+export async function verifyUser(email: string, password: string) {
+  const rows = await sql`
+    SELECT id, email, name FROM inkwell_users
+    WHERE email = ${email}
+      AND password_hash = crypt(${password}, password_hash)
+  `
+  return rows[0] || null
+}
+
+// Store password hash using pgcrypto blowfish (equivalent strength to bcrypt)
+export async function createUser(email: string, name: string, password: string) {
   const rows = await sql`
     INSERT INTO inkwell_users (email, name, password_hash)
-    VALUES (${email}, ${name}, ${passwordHash})
-    RETURNING *
+    VALUES (${email}, ${name}, crypt(${password}, gen_salt('bf', 10)))
+    RETURNING id, email, name, created_at
   `
   return rows[0]
 }

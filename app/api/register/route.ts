@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import bcrypt from 'bcryptjs'
 import { createUser, getUserByEmail, initDB } from '@/lib/db'
 
 export async function POST(req: NextRequest) {
@@ -16,8 +15,8 @@ export async function POST(req: NextRequest) {
     if (existing) {
       return NextResponse.json({ error: 'Email already in use' }, { status: 409 })
     }
-    const hash = await bcrypt.hash(password, 10)
-    const user = await createUser(email, name, hash)
+    // Password hashed by Postgres pgcrypto crypt() — no bcrypt in Node needed
+    const user = await createUser(email, name, password)
     return NextResponse.json({ id: user.id, email: user.email, name: user.name })
   } catch (err) {
     console.error(err)
