@@ -3,25 +3,27 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getDocumentById, getDocumentShares, shareDocument, unshareDocument, initDB } from '@/lib/db'
 
-type Params = { params: { id: string } }
+type Params = { params: Promise<{ id: string }> }
 
 export async function GET(_req: NextRequest, { params }: Params) {
+  const { id } = await params
   const session = await getServerSession(authOptions)
   if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   await initDB()
-  const doc = await getDocumentById(params.id)
+  const doc = await getDocumentById(id)
   if (!doc || doc.owner_email !== session.user.email) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-  const shares = await getDocumentShares(params.id)
+  const shares = await getDocumentShares(id)
   return NextResponse.json(shares)
 }
 
 export async function POST(req: NextRequest, { params }: Params) {
+  const { id } = await params
   const session = await getServerSession(authOptions)
   if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   await initDB()
-  const doc = await getDocumentById(params.id)
+  const doc = await getDocumentById(id)
   if (!doc || doc.owner_email !== session.user.email) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -30,19 +32,20 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (email === session.user.email) {
     return NextResponse.json({ error: 'Cannot share with yourself' }, { status: 400 })
   }
-  const share = await shareDocument(params.id, email)
+  const share = await shareDocument(id, email)
   return NextResponse.json(share, { status: 201 })
 }
 
 export async function DELETE(req: NextRequest, { params }: Params) {
+  const { id } = await params
   const session = await getServerSession(authOptions)
   if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   await initDB()
-  const doc = await getDocumentById(params.id)
+  const doc = await getDocumentById(id)
   if (!doc || doc.owner_email !== session.user.email) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const { email } = await req.json()
-  await unshareDocument(params.id, email)
+  await unshareDocument(id, email)
   return NextResponse.json({ success: true })
 }
